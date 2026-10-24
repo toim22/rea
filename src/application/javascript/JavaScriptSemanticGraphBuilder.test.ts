@@ -19,7 +19,10 @@ import {
   constructSemanticGraphNode,
   createSemanticGraphProjectionState,
 } from "./JavaScriptSemanticGraphConstruction.js";
-import type { JavaScriptArtifactFile } from "../../domain/javascript/javascriptArtifactFiles.js";
+import {
+  type JavaScriptArtifactFile,
+  javaScriptArtifactTextExclusion,
+} from "../../domain/javascript/javascriptArtifactFiles.js";
 import { queryJavaScriptSemanticGraph } from "../../domain/javascript/javascriptSemanticQuery.js";
 import {
   analyzeJavaScriptSemantics,
@@ -1356,5 +1359,89 @@ it("projects and adopts more than the default per-file capacity when explicitly 
   });
   expect(() => bounded.adoptFileProjection(result.value)).toThrow(
     "exceed the offered tree capacity",
+  );
+});
+
+it("reports node-cap drops as truncation when an unavailable file cannot retain its module", () => {
+  const projection = createJavaScriptSemanticGraphProjection({
+    totalNodes: 1,
+    fileNodes: 1,
+  });
+  const file1: JavaScriptArtifactFile = {
+    path: "first.js",
+    container_sha256: SHA256,
+    sha256: SHA256,
+    bytes: 10,
+    inventory_artifact_id: `art_${SHA256}`,
+    kind: "javascript",
+    unpacked: false,
+    text: { included: true, value: "" },
+  };
+  projection.projectFile(file1, analyzeJavaScriptSemantics(""));
+  const file2: JavaScriptArtifactFile = {
+    path: "invalid.js",
+    container_sha256: SHA256,
+    sha256: SHA256,
+    bytes: 10,
+    inventory_artifact_id: `art_${SHA256}`,
+    kind: "javascript",
+    unpacked: false,
+    text: { included: false, reason: "invalid-utf8" },
+  };
+  projection.recordUnavailableFile(
+    file2,
+    javaScriptArtifactTextExclusion(file2)!,
+    null,
+    "incomplete-module",
+  );
+  const graph = projection.finish(SHA256, {
+    graph_id: `jag_${"b".repeat(64)}`,
+    nodes: [],
+  });
+  expect(graph.coverage.truncated).toBe(true);
+  expect(graph.coverage.limits).toEqual(
+    expect.arrayContaining([
+      {
+        name: "semantic_graph_node_ceiling",
+        value: 1,
+        unit: "items",
+      },
+    ]),
+  );
+});
+
+it("reports unknown-ceiling drops when an unavailable file exceeds unknown capacity", () => {
+  const projection = createJavaScriptSemanticGraphProjection({
+    fileUnknowns: 2,
+  });
+  const file: JavaScriptArtifactFile = {
+    path: "invalid.js",
+    container_sha256: SHA256,
+    sha256: SHA256,
+    bytes: 10,
+    inventory_artifact_id: `art_${SHA256}`,
+    kind: "javascript",
+    unpacked: false,
+    text: { included: false, reason: "invalid-utf8" },
+  };
+  projection.recordUnavailableFile(
+    file,
+    javaScriptArtifactTextExclusion(file)!,
+    null,
+    "incomplete-module",
+  );
+  const graph = projection.finish(SHA256, {
+    graph_id: `jag_${"b".repeat(64)}`,
+    nodes: [],
+  });
+  expect(graph.coverage.truncated).toBe(true);
+  expect(graph.coverage.limits).toEqual(
+    expect.arrayContaining([
+      {
+        name: "semantic_graph_file_unknown_ceiling",
+        value: 2,
+        unit: "items",
+      },
+    ]),
   );
 });

@@ -30,6 +30,11 @@ export type JavaScriptArtifactFileKind =
   | "source-map"
   | "native-addon";
 
+export type JavaScriptArtifactExcludedTextReason =
+  | "not-applicable"
+  | "invalid-utf8"
+  | "outside-analysis-scope";
+
 /** One content-addressed local artifact file and its text availability. */
 export interface JavaScriptArtifactFile {
   readonly path: string;
@@ -43,10 +48,7 @@ export interface JavaScriptArtifactFile {
     | { readonly included: true; readonly value: string }
     | {
         readonly included: false;
-        readonly reason:
-          | "not-applicable"
-          | "invalid-utf8"
-          | "outside-analysis-scope";
+        readonly reason: JavaScriptArtifactExcludedTextReason;
       };
 }
 
